@@ -1,221 +1,205 @@
--- En esta consulta se sacará a todos los luchadores que hayan nacido después de 1985, cuyo peso sea mayor de 60, y que pertenezcan al equipo "Team Gamma".
+-- Consulta para obtener los luchadores con su título y división
+
+SELECT
+   l.Nombre AS Luchador,
+   d.NombreDivision AS Division,
+   d.idCampeon AS CampeonID
+FROM luchador l
+JOIN division d ON l.idLuchador = d.idCampeon;
+
+-- Consulta para obtener el árbitro de cada combate(subconsulta)
+SELECT
+   c.idCombate,
+   c.Resultado,
+   c.MetodoFinalizacion,
+   c.Duracion,
+   c.Arbitro_idArbitro,
+   (SELECT a.Nombre FROM arbitro a WHERE a.idArbitro = c.Arbitro_idArbitro) AS Arbitro
+FROM combate c;
+
+-- Consulta para obtener los combates de un evento con los luchadores involucrados
+SELECT E.Nombre AS Evento, C.idCombate, L1.Nombre AS Luchador_Rojo, L2.Nombre AS Luchador_Azul, C.Resultado
+FROM Combate C
+JOIN Evento E ON C.Evento_idEvento = E.idEvento
+JOIN Luchador L1 ON C.Luchador_idLuchador_rojo = L1.idLuchador
+JOIN Luchador L2 ON C.Luchador_idLuchador_azul = L2.idLuchador;
+
+--Consulta para obtener los luchadores con más victorias por decisión unánime
+SELECT L.Nombre AS Luchador, COUNT(C.idCombate) AS Victorias_Por_Decision
+FROM Luchador L
+JOIN Combate C ON (C.Luchador_idLuchador_rojo = L.idLuchador OR C.Luchador_idLuchador_azul = L.idLuchador)
+WHERE C.Resultado = 3
+GROUP BY L.idLuchador
+ORDER BY Victorias_Por_Decision DESC;
+
+--Consulta para obtener el evento con más asistencia
+SELECT E.Nombre AS Evento, E.Asistencias
+FROM Evento E
+ORDER BY E.Asistencias DESC
+LIMIT 1;
+
+--Muestro todos los combates clasificados por ronda, con los nombres de los luchadores involucrados
+CREATE VIEW Combates_Por_Ronda AS
+SELECT R.NumeroRonda, C.idCombate, L1.Nombre AS Luchador_Rojo, L2.Nombre AS Luchador_Azul, C.MetodoFinalizacion, C.Duracion
+FROM Combate C
+JOIN Ronda R ON C.Ronda_NumeroRonda = R.NumeroRonda
+JOIN Luchador L1 ON C.Luchador_idLuchador_rojo = L1.idLuchador
+JOIN Luchador L2 ON C.Luchador_idLuchador_azul = L2.idLuchador;
+
 
 SELECT *
-FROM Luchador
-WHERE YEAR(FechaNacimiento) > 1985
-AND Peso > 60
-AND Equipo = 'Team Gamma';
--- Con esta consulta estamos encontrando los luchadores con el récord más alto registrado en cada equipo:
+FROM Combates_Por_Ronda;
 
-SELECT L1.Nombre, L1.Record, L1.Equipo
-FROM Luchador AS L1
-WHERE (L1.Equipo, L1.Record) IN (
-    SELECT Equipo, MAX(Record) AS MaxRecord
-    FROM Luchador
-    GROUP BY Equipo
-);
+--Esta vista muestra todos los luchadores agrupados por la división en la que pelean
 
--- En esta consulta queremos obtener los nombres de los entrenadores con sus respectivas academias,junto con el nombre del luchador y el nombre de su título asociado
-
-SELECT DISTINCT e.NombreEntrenador, e.Academia, l.Nombre, l.Titulo_NombreTitutlo AS Titulo
-FROM Luchador l
-JOIN Entrenador e ON l.Entrenador_NombreEntrenador = e.NombreEntrenador
-WHERE l.Titulo_NombreTitutlo IS NOT NULL;
-
--- Con esta consulta para mostrar información detallada de los combates, incluyendo nombres de luchadores y resultado
-
-SELECT c.idCombate, c.`Fecha/Hora`, l1.Nombre AS Luchador1, l2.Nombre AS Luchador2, c.`Resultado`, c.`MetodoFinalizacion`, c.`Duracion`
-FROM `Participacion` p
-JOIN `combate` c ON p.idCombate = c.idCombate
-JOIN `luchador` l1 ON p.idLuchador = l1.idLuchador
-JOIN `luchador` l2 ON p.idLuchador != l2.idLuchador AND p.idCombate = (SELECT idCombate FROM `Participacion` WHERE idCombate = p.idCombate LIMIT 1)wwwww
-ORDER BY c.idCombate;
+CREATE VIEW Luchadores_Por_Division AS
+SELECT D.NombreDivision, L.Nombre AS Luchador, L.Peso, L.Altura
+FROM Luchador L
+JOIN Division D ON L.Division_idDivision = D.idDivision
+ORDER BY D.NombreDivision, L.Nombre;
 
 
+SELECT *
+FROM Luchadores_Por_Division;
 
-
-
-Vista 1
-
--- Esta esta vista está hecha con la consulta del apartado anterior donde se nos mostraba la información detallada de los combates con el nombre del ganador
-
-CREATE VIEW Detalles_Combates AS
-SELECT c.idCombate, c.`Fecha/Hora`, l1.Nombre AS Luchador1, l2.Nombre AS Luchador2,
-   CASE WHEN p.Ganador = l1.idLuchador THEN l1.Nombre ELSE l2.Nombre END AS Ganador,
-   c.`Resultado`, c.`MetodoFinalizacion`, c.`Duracion`
-FROM `Participacion` p
-JOIN `combate` c ON p.idCombate = c.idCombate
-JOIN `luchador` l1 ON p.idLuchador = l1.idLuchador
-JOIN `luchador` l2 ON p.idLuchador != l2.idLuchador AND p.idCombate = (SELECT idCombate FROM `Participacion` WHERE idCombate = p.idCombate LIMIT 1);
-SELECT * FROM Detalles_Combates;
-
-Vista 2
-
--- Creamos  una vista llamada MejoresLuchadores que muestra los nombres, récords y equipos de los luchadores con el mejor récord en cada equipo.
-
-CREATE VIEW MejoresLuchadores AS
-SELECT L1.Nombre, L1.Record, L1.Equipo
-FROM Luchador AS L1
-WHERE (L1.Equipo, L1.Record) IN (
-   SELECT Equipo, MAX(Record) AS MaxRecord
-   FROM Luchador
-   GROUP BY Equipo
-);
-
-SELECT * FROM mejoresluchadores m ;
-
-Triggers 1
-
-DELIMITER //
-CREATE TRIGGER before_insert_combate
-BEFORE INSERT ON combate
-FOR EACH ROW
-BEGIN
-   IF NEW.Duracion > 1000 THEN
-       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La duración del combate no puede ser mayor a 60 minutos';
-   END IF;
-END //
-DELIMITER ;
-INSERT INTO combate (idCombate, `Fecha/Hora`, Resultado, MetodoFinalizacion, Duracion, Arbitro_idArbitro, Ronda_NumeroRonda, Evento_idEvento)
-VALUES (17, '2024-06-20 18:00:00', 1, 'KO', 1001, 1, 1, 1);
-
-Triggers 2
-
-DELIMITER //
-CREATE TRIGGER validarInsercionArbitro
-BEFORE INSERT ON arbitro
-FOR EACH ROW
-BEGIN
-   DECLARE v_count INT;
-  
-   SELECT COUNT(*) INTO v_count
-   FROM arbitro
-   WHERE Nombre = NEW.Nombre;
-  
-   IF v_count > 0 THEN
-       SIGNAL SQLSTATE '45000'
-       SET MESSAGE_TEXT = 'El nombre del árbitro ya existe.';
-   END IF;
-END //
-DELIMITER ;
-INSERT INTO arbitro (idArbitro, Nombre, Pais, Especialidad)
-VALUES (21, 'Carlos López', 'España', 'Boxeo');
-INSERT IGNORE INTO arbitro (idArbitro, Nombre, Pais, Especialidad)
-VALUES (22, 'Carlos López', 'Brasil', 'Jiu-Jitsu');
-
-Función 1
-
-DELIMITER //
-CREATE FUNCTION ObtenerNombreLuchador(p_idLuchador INT)
+--Función para obtener el nombre del luchador y el árbitro que lo ha arbitrado
+DELIMITER $$
+CREATE FUNCTION ObtenerArbitroPorLuchador(luchadorId INT)
 RETURNS VARCHAR(45)
+DETERMINISTIC
 BEGIN
-   DECLARE v_Nombre VARCHAR(45);
+   DECLARE arbitroNombre VARCHAR(45);
+   SELECT a.Nombre INTO arbitroNombre
+   FROM Combate c
+   JOIN Arbitro a ON c.Arbitro_idArbitro = a.idArbitro
+   WHERE c.Luchador_idLuchador_rojo = luchadorId OR c.Luchador_idLuchador_azul = luchadorId;
   
-   SELECT Nombre INTO v_Nombre
-   FROM luchador
-   WHERE idLuchador = p_idLuchador;
-  
-   RETURN v_Nombre;
-END //
-DELIMITER ;
-SELECT ObtenerNombreLuchador(12) AS NombreLuchador;
-
-
-Función 2
-
-DELIMITER //
-CREATE FUNCTION CalcularEdadLuchador(p_idLuchador INT)
-RETURNS INT
-BEGIN
-   DECLARE v_FechaNacimiento DATE;
-   DECLARE v_Edad INT;
-  
-   SELECT FechaNacimiento INTO v_FechaNacimiento
-   FROM luchador
-   WHERE idLuchador = p_idLuchador;
-  
-   SET v_Edad = TIMESTAMPDIFF(YEAR, v_FechaNacimiento, CURDATE());
-  
-   RETURN v_Edad;
-END //
+   RETURN arbitroNombre;
+END $$
 DELIMITER ;
 
-Procedimiento que hace uso de un cursor:
 
-DELIMITER //
-CREATE PROCEDURE ListarLuchadoresPorEquipo(IN equipo VARCHAR(100))
+SELECT Nombre, ObtenerArbitroPorLuchador(idLuchador) AS Arbitro
+FROM Luchador;
+
+--Esta función EsCategoriaPeso verifica si un luchador pertenece a una categoría de peso específica comparando el nombre de la división a la que pertenece con una categoría dada
+DELIMITER $$
+CREATE FUNCTION EsCategoriaPeso(idLuchador INT, nombreDivision VARCHAR(45))
+RETURNS BOOLEAN
+DETERMINISTIC
 BEGIN
-   DECLARE done INT DEFAULT FALSE;
-   DECLARE nombre_luchador VARCHAR(200);
-   DECLARE cur CURSOR FOR SELECT Nombre FROM Luchador WHERE Equipo = equipo;
-   DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-   -- Crear una tabla temporal para almacenar los resultados
-   CREATE TEMPORARY TABLE IF NOT EXISTS TempLuchadores (
-       Luchador VARCHAR(200)
-   );
-   -- Limpiar la tabla temporal antes de llenarla
-   TRUNCATE TABLE TempLuchadores;
-   OPEN cur;
-   read_loop: LOOP
-       FETCH cur INTO nombre_luchador;
+   DECLARE divisionLuchador VARCHAR(45);
+   SELECT NombreDivision INTO divisionLuchador
+   FROM Division
+   INNER JOIN Luchador ON Division.idDivision = Luchador.Division_idDivision
+   WHERE Luchador.idLuchador = idLuchador;
+   RETURN divisionLuchador = nombreDivision;
+END$$
+DELIMITER ;
+SELECT idLuchador, Nombre
+FROM Luchador
+WHERE EsCategoriaPeso(idLuchador, 'Peso Medio') = TRUE;
+
+-- Procedimiento que muestra los luchadores por categoría de peso y información relacionada como el nombre del arbitro
+DELIMITER $$
+CREATE PROCEDURE MostrarLuchadoresYArbitrosPorCategoriaPeso(nombreDivision VARCHAR(45))
+BEGIN
+   SELECT
+       l.idLuchador,
+       l.Nombre AS Luchador,
+       l.Record AS Victorias,
+       a.Nombre AS Arbitro
+   FROM Luchador l
+   JOIN Combate c ON l.idLuchador = c.Luchador_idLuchador_rojo OR l.idLuchador = c.Luchador_idLuchador_azul
+   JOIN Arbitro a ON c.Arbitro_idArbitro = a.idArbitro
+   WHERE EsCategoriaPeso(l.idLuchador, nombreDivision) = TRUE;
+END $$
+DELIMITER ;
+
+
+CALL MostrarLuchadoresYArbitrosPorCategoriaPeso('Peso Pesado');
+
+-- Procedimiento para listar combates supervisados por un árbitro específico
+DELIMITER $$
+CREATE PROCEDURE CombatesPorArbitro(nombreArbitro VARCHAR(45))
+BEGIN
+   DECLARE done INT DEFAULT 0;
+   DECLARE combateID INT;
+   DECLARE eventoNombre VARCHAR(45);
+   DECLARE combateCursor CURSOR FOR
+       SELECT Combate.idCombate, Evento.Nombre
+       FROM Combate
+       INNER JOIN Evento ON Combate.Evento_idEvento = Evento.idEvento
+       INNER JOIN Arbitro ON Combate.Arbitro_idArbitro = Arbitro.idArbitro
+       WHERE Arbitro.Nombre = nombreArbitro;
+   DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+   OPEN combateCursor;
+   combate_loop: LOOP
+       FETCH combateCursor INTO combateID, eventoNombre;
        IF done THEN
-           LEAVE read_loop;
+           LEAVE combate_loop;
        END IF;
-       -- Insertar el nombre del luchador en la tabla temporal
-       INSERT INTO TempLuchadores (Luchador) VALUES (nombre_luchador);
+       SELECT CONCAT('Combate ID: ', combateID, ' en el evento: ', eventoNombre) AS DetalleCombate;
    END LOOP;
-   CLOSE cur;
-   -- Seleccionar todos los registros de la tabla temporal
-   SELECT * FROM TempLuchadores;
-   -- Eliminar la tabla temporal
-   DROP TEMPORARY TABLE TempLuchadores;
-END //
+   CLOSE combateCursor;
+END$$
 DELIMITER ;
--- Llamar al procedimiento almacenado
-CALL ListarLuchadoresPorEquipo('Team Alpha');
+CALL CombatesPorArbitro('Herb Dean');
 
-Procedimiento 1
-
-DELIMITER //
-CREATE PROCEDURE InsertarLuchador(
-   IN p_idLuchador INT,
-   IN p_Nombre VARCHAR(45),
-   IN p_Pais VARCHAR(45),
-   IN p_FechaNacimiento DATE,
-   IN p_Peso INT,
-   IN p_Altura INT,
-   IN p_Record VARCHAR(50),
-   IN p_Equipo VARCHAR(45),
-   IN p_Titulo_NombreTitutlo VARCHAR(100),
-   IN p_Division_idDivision INT,
-   IN p_Entrenador_NombreEntrenador VARCHAR(45)
-)
+-- Procedimiento para listar luchadores por división
+DELIMITER $$
+CREATE PROCEDURE LuchadoresPorDivision(nombreDivision VARCHAR(45))
 BEGIN
-   INSERT INTO luchador (
-       idLuchador, Nombre, Pais, FechaNacimiento, Peso, Altura, Record, Equipo,
-       Titulo_NombreTitutlo, Division_idDivision, Entrenador_NombreEntrenador
-   ) VALUES (
-       p_idLuchador, p_Nombre, p_Pais, p_FechaNacimiento, p_Peso, p_Altura, p_Record,
-       p_Equipo, p_Titulo_NombreTitutlo, p_Division_idDivision, p_Entrenador_NombreEntrenador
-   );
-END //
+   SELECT Luchador.idLuchador, Luchador.Nombre, Luchador.Pais, Division.NombreDivision
+   FROM Luchador
+   INNER JOIN Division ON Luchador.Division_idDivision = Division.idDivision
+   WHERE Division.NombreDivision = nombreDivision;
+END$$
 DELIMITER ;
-CALL InsertarLuchador(
-   201, 'Juan Pérez', 'Argentina', '1990-05-15', 80, 180, '10-2-0',
-   'Equipo A', 'Campeón Peso Medio', 1, 'Abeni Abiodun'
-);
+CALL LuchadoresPorDivision('Peso Mosca');
 
-Procedimiento 2
+-- Este trigger hace que un luchador no pueda participar como rojo y azul en el mismo combate
 
-DELIMITER //
-CREATE PROCEDURE ActualizarRecordLuchador(
-   IN p_idLuchador INT,
-   IN p_NuevoRecord VARCHAR(50)
-)
+DELIMITER $$
+CREATE TRIGGER TRG_Verificar_Luchadores_Combate
+BEFORE INSERT ON Combate
+FOR EACH ROW
 BEGIN
-   UPDATE luchador
-   SET Record = p_NuevoRecord
-   WHERE idLuchador = p_idLuchador;
-END //
+   IF NEW.Luchador_idLuchador_rojo = NEW.Luchador_idLuchador_azul THEN
+       SIGNAL SQLSTATE '45000'
+       SET MESSAGE_TEXT = 'Un luchador no puede participar en ambos lados del combate.';
+   END IF;
+END$$
 DELIMITER ;
-CALL ActualizarRecordLuchador(1, '11-2-0');
+
+
+INSERT INTO Combate (idCombate, Arbitro_idArbitro, Ronda_NumeroRonda, Evento_idEvento, Luchador_idLuchador_rojo, Luchador_idLuchador_azul, Resultado)
+VALUES (1, 1, 1, 1, 1, 1, 1);
+
+-- Este trigger incrementa el récord de un luchador ganador cuando se registra el resultado de un combate
+
+DELIMITER $$
+CREATE TRIGGER TRG_Actualizar_Record
+AFTER INSERT ON Combate
+FOR EACH ROW
+BEGIN
+   -- Si el resultado es 1, el luchador rojo ganó.
+   IF NEW.Resultado = 1 THEN
+       UPDATE Luchador
+       SET Record = Record + 1
+       WHERE idLuchador = NEW.Luchad or_idLuchador_rojo;
+   -- Si el resultado es 2, el luchador azul ganó.
+   ELSEIF NEW.Resultado = 2 THEN
+       UPDATE Luchador
+       SET Record = Record + 1
+       WHERE idLuchador = NEW.Luchador_idLuchador_azul;
+   END IF;
+END$$
+DELIMITER ;
+
+
+INSERT INTO Combate (Resultado, MetodoFinalizacion, Duracion, Arbitro_idArbitro, Ronda_NumeroRonda, Evento_idEvento, Luchador_idLuchador_rojo, Luchador_idLuchador_azul)
+VALUES (1, 'KO', 5, 1, 1, 1, 1, 2);
+
+SELECT idLuchador, Nombre, Record
+FROM Luchador;
